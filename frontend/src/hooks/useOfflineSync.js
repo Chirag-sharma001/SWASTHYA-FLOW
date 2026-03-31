@@ -1,86 +1,99 @@
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { QueueContext } from '../context/QueueContext';
 import { apiService } from '../services/apiService';
 import { db } from '../services/db';
 
+/**
+ * useOfflineSync
+ *
+ * Wraps token creation with offline-first logic:
+ *   - Online  → hit API directly, cache result in Dexie
+ *   - Offline → write to Dexie pendingTokens with syncStatus: 'pending_sync'
+ *
+ * On reconnect, all pending tokens are sent in a single batch via
+ * POST /api/tokens/bulk-sync, then the Dexie cache is cleared.
+ *
+ * A `syncing` flag is exposed for the SyncStatusBadge.
+ */
 export function useOfflineSync() {
   const { isOnline, session, queue, dispatch } = useContext(QueueContext);
   const [syncing, setSyncing] = useState(false);
+  // Guard against concurrent sync runs
+  const syncingRef = useRef(false);
 
   useEffect(() => {
     if (isOnline) {
       replayPendingTokens();
     }
-  }, [isOnline]);
+  }, [isOnline]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const replayPendingTokens = async () => {
-    if (syncing) return;
+    if (syncingRef.current) return;
+    const pending = await db.pendingTokens.toArray();
+    if (pending.length === 0) return;
+
+    syncingRef.current = true;
     setSyncing(true);
-    
+
     try {
-      const pending = await db.pendingTokens.toArray();
-      // Sort by createdAt order
+      // Sort by creation order — atomic counter on backend assigns correct tokenNumbers
       pending.sort((a, b) => a.createdAt - b.createdAt);
 
-      for (const token of pending) {
-        try {
-          await apiService.createToken(token.patientName, token.sessionId);
-          await db.pendingTokens.delete(token.id);
-        } catch (error) {
-          console.error('Failed to sync token:', token, error);
-        }
-      }
-      
-      // Refresh queue if session exists
+      await apiService.bulkSync(pending);
+
+      // Clear all pending records in one transaction
+      await db.pendingTokens.bulkDelete(pending.map(t => t.id));
+
+      // Refresh queue from server
       if (session) {
         const queueData = await apiService.getQueue(session.sessionId);
-        dispatch({ type: 'SET_QUEUE', payload: queueData });
-        
-        // Cache to dexie
+        dispatch({ type: 'SET_QUEUE', payload: queueData.queue });
         await db.queue.clear();
-        await db.queue.bulkAdd(queueData);
+        await db.queue.bulkAdd(queueData.queue);
       }
+    } catch (err) {
+      console.error('[useOfflineSync] bulk-sync failed:', err);
+      // Leave pending records in Dexie — will retry on next reconnect
     } finally {
+      syncingRef.current = false;
       setSyncing(false);
     }
   };
 
   const createTokenWithSync = async (patientName, sessionId) => {
     if (isOnline) {
-      try {
-        const result = await apiService.createToken(patientName, sessionId);
-        dispatch({ type: 'NEW_PATIENT_JOINED', payload: result });
-        
-        // Cache to dexie
-        await db.queue.put(result.token);
-        return result.token;
-      } catch (error) {
-        throw error;
-      }
-    } else {
-      // Offline fallback
-      const offlineToken = {
-        patientName,
-        sessionId,
-        createdAt: Date.now(),
-        syncStatus: 'pending_sync'
-      };
-      await db.pendingTokens.add(offlineToken);
-      
-      // Optimistically update queue (create pseudo-token)
-      const pseudoToken = {
-        ...offlineToken,
-        tokenId: `offline-${Date.now()}`,
-        tokenNumber: queue.length + 1,
-        status: 'pending'
-      };
-      
-      const newQueue = [...queue, pseudoToken];
-      dispatch({ type: 'SET_QUEUE', payload: newQueue });
-      await db.queue.put(pseudoToken);
-      
-      return pseudoToken;
+      const result = await apiService.createToken(patientName, sessionId);
+      dispatch({ type: 'NEW_PATIENT_JOINED', payload: result });
+
+      // Cache to Dexie
+      const tokenToCache = result.token || result;
+      await db.queue.put({ ...tokenToCache, syncStatus: 'synced' });
+
+      return result.token || result;
     }
+
+    // ── Offline path ──────────────────────────────────────────────────────
+    const offlineRecord = {
+      patientName,
+      sessionId,
+      createdAt: Date.now(),
+      syncStatus: 'pending_sync',
+    };
+    const id = await db.pendingTokens.add(offlineRecord);
+
+    // Optimistic pseudo-token so the UI updates immediately
+    const pseudoToken = {
+      ...offlineRecord,
+      id,
+      tokenId: `offline-${id}-${Date.now()}`,
+      tokenNumber: queue.length + 1,
+      status: 'pending',
+    };
+
+    dispatch({ type: 'SET_QUEUE', payload: [...queue, pseudoToken] });
+    await db.queue.put(pseudoToken);
+
+    return pseudoToken;
   };
 
   return {
@@ -88,6 +101,6 @@ export function useOfflineSync() {
     isOnline,
     queue,
     session,
-    syncing
+    syncing,
   };
 }

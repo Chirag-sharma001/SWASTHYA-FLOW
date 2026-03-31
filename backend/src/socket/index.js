@@ -4,7 +4,7 @@ let io;
 
 function initSocket(server) {
   io = new Server(server, {
-    cors: { origin: 'http://localhost:3000', methods: ['GET', 'POST'] }
+    cors: { origin: ['http://localhost:5173', 'http://localhost:5174', 'http://10.228.78.131:5173'], methods: ['GET', 'POST'] }
   });
 
   io.on('connection', (socket) => {
@@ -16,7 +16,8 @@ function initSocket(server) {
 
 function emitToSession(sessionId, event, payload) {
   if (io) {
-    io.to(sessionId).emit(event, payload);
+    // Broadcast to all clients for MVP as per design.md
+    io.emit(event, payload);
   }
 }
 

@@ -55,7 +55,7 @@ export default function RoleSelection() {
                     Live queue status board for waiting areas. Provide transparency and reduce perceived wait times.
                 </p>
 <button onClick={() => navigate('/patient/demo')} className="w-full py-4 px-6 clinical-gradient text-white font-headline font-bold rounded-lg shadow-sm active:scale-95 transition-all">
-                    Launch Display
+                    Launch Status Board
                 </button>
 </div>
 </div>

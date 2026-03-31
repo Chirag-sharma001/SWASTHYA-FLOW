@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useOfflineSync } from '../hooks/useOfflineSync';
 import { estimateWait } from '../utils/waitEstimator';
+import QRSessionCode from '../components/QRSessionCode';
+import SyncStatusBadge from '../components/SyncStatusBadge';
 
 export default function ReceptionPanel() {
   const navigate = useNavigate();
@@ -12,21 +14,26 @@ export default function ReceptionPanel() {
   const [submitting, setSubmitting] = useState(false);
   const [lastToken, setLastToken] = useState(null);
   const [error, setError] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const waitingQueue = queue.filter(t => t.status === 'pending');
   const emergencyCount = queue.filter(t => t.status === 'pending' && t.priority === 'emergency').length;
   const consultDurations = session?.consultationDurations ?? [];
   const avgWaitSec = waitingQueue.length > 0
-    ? estimateWait(1, consultDurations) / 60
+    ? (waitingQueue[0].estimatedWait || 0) / 60
     : 0;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!patientName.trim()) return;
+    if (!session) {
+      setError('No active session found. Please wait for a doctor to start a session.');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      const token = await createTokenWithSync(patientName.trim(), session?.sessionId ?? 'default');
+      const token = await createTokenWithSync(patientName.trim(), session.sessionId);
       setLastToken(token);
       setPatientName('');
     } catch (err) {
@@ -41,13 +48,15 @@ export default function ReceptionPanel() {
 
 <header className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 shadow-sm dark:shadow-none docked full-width top-0 z-50 flex justify-between items-center w-full px-6 py-3 max-w-full fixed lg:pl-72">
 <div className="flex items-center gap-4">
-<span className="lg:hidden material-symbols-outlined text-on-surface-variant">menu</span>
+<button
+  className="lg:hidden p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+  onClick={() => setMenuOpen(prev => !prev)}
+  aria-label="Toggle menu"
+>
+  <span className="material-symbols-outlined text-on-surface-variant">menu</span>
+</button>
 <h1 className="font-['Manrope'] font-semibold text-lg text-teal-700 dark:text-teal-400">Reception Dashboard</h1>
-{!isOnline && (
-  <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-bold rounded-md border border-amber-300">
-    OFFLINE {syncing ? '· Syncing…' : ''}
-  </span>
-)}
+{<SyncStatusBadge isOnline={isOnline} syncing={syncing} />}
 </div>
 <div className="flex items-center space-x-4">
 <div className="relative hidden md:block">
@@ -66,6 +75,54 @@ export default function ReceptionPanel() {
 </div>
 </div>
 </header>
+
+{/* Mobile nav overlay */}
+{menuOpen && (
+  <div className="fixed inset-0 z-[70] lg:hidden">
+    <div className="absolute inset-0 bg-black/40" onClick={() => setMenuOpen(false)} />
+    <nav className="absolute left-0 top-0 h-full w-64 bg-slate-50 dark:bg-slate-950 flex flex-col py-6 px-4 space-y-2">
+      <div className="px-4 mb-8 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white">
+            <span className="material-symbols-outlined" data-icon="medical_services">medical_services</span>
+          </div>
+          <div>
+            <h2 className="text-xl font-black text-teal-800 dark:text-teal-200 tracking-tight">SwasthQueue</h2>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60">OPD Management</p>
+          </div>
+        </div>
+        <button onClick={() => setMenuOpen(false)} className="p-1 rounded-md hover:bg-slate-200 dark:hover:bg-slate-800">
+          <span className="material-symbols-outlined text-on-surface-variant">close</span>
+        </button>
+      </div>
+      <div className="flex-grow space-y-1">
+        <a className="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:text-teal-600 dark:hover:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-all duration-200 ease-in-out rounded-lg font-['Public_Sans'] text-sm font-medium mx-2 my-1" href="#" onClick={(e) => { e.preventDefault(); navigate('/'); setMenuOpen(false); }}>
+          <span className="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+          Dashboard
+        </a>
+        <a className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-900 text-teal-700 dark:text-teal-400 shadow-sm rounded-lg mx-2 my-1 font-['Public_Sans'] text-sm font-semibold" href="#">
+          <span className="material-symbols-outlined" data-icon="queue">queue</span>
+          Queue
+        </a>
+        <a className="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:text-teal-600 dark:hover:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-all duration-200 ease-in-out rounded-lg font-['Public_Sans'] text-sm font-medium mx-2 my-1" href="#" onClick={(e) => { e.preventDefault(); navigate('/daily-summary'); setMenuOpen(false); }}>
+          <span className="material-symbols-outlined" data-icon="history">history</span>
+          History
+        </a>
+        <a className="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:text-teal-600 dark:hover:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-all duration-200 ease-in-out rounded-lg font-['Public_Sans'] text-sm font-medium mx-2 my-1" href="#">
+          <span className="material-symbols-outlined" data-icon="settings">settings</span>
+          Settings
+        </a>
+      </div>
+      <div className="mt-auto px-2 space-y-3">
+        <QRSessionCode sessionId={session?.sessionId} size={140} />
+        <button className="w-full flex items-center justify-center gap-2 bg-primary text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:scale-[0.98] transition-transform" onClick={() => { document.getElementById('patient-name-input')?.focus(); setMenuOpen(false); }}>
+          <span className="material-symbols-outlined text-sm" data-icon="add">add</span>
+          New Token
+        </button>
+      </div>
+    </nav>
+  </div>
+)}
 
 <nav className="bg-slate-50 dark:bg-slate-950 h-screen w-64 fixed left-0 top-0 hidden lg:flex flex-col py-6 px-4 space-y-2 z-[60]">
 <div className="px-4 mb-8">
@@ -98,6 +155,9 @@ export default function ReceptionPanel() {
             </a>
 </div>
 <div className="mt-auto px-2">
+<div className="mb-3">
+  <QRSessionCode sessionId={session?.sessionId} size={160} />
+</div>
 <button className="w-full flex items-center justify-center gap-2 bg-primary text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:scale-[0.98] transition-transform" onClick={() => document.getElementById('patient-name-input')?.focus()}>
 <span className="material-symbols-outlined text-sm" data-icon="add">add</span>
                 New Token
@@ -269,8 +329,7 @@ export default function ReceptionPanel() {
   </tr>
 )}
 {queue.map((token, idx) => {
-  const position = waitingQueue.findIndex(t => t.tokenId === token.tokenId);
-  const etaSec = position >= 0 ? estimateWait(position + 1, session?.consultationDurations ?? []) : 0;
+  const etaSec = token.estimatedWait || 0;
   const etaMin = Math.round(etaSec / 60);
   const isCalled = token.status === 'called';
   const isCompleted = token.status === 'completed';
@@ -345,7 +404,7 @@ export default function ReceptionPanel() {
 
 <footer className="lg:ml-64 w-full border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col md:flex-row justify-between items-center px-8 py-6 mt-auto">
 <div className="flex flex-col md:flex-row gap-6 items-center">
-<span className="font-['Public_Sans'] text-xs text-slate-500 dark:text-slate-400 font-bold text-slate-800 dark:text-slate-100">© 2024 SwasthQueue Hospital Systems. Demo v1.0.4</span>
+<span className="font-['Public_Sans'] text-xs text-slate-500 dark:text-slate-400 font-bold text-slate-800 dark:text-slate-100">© 2026 SwasthQueue Hospital Systems. Demo v1.0.4</span>
 <div className="flex gap-4">
 <a className="font-['Public_Sans'] text-xs text-slate-500 dark:text-slate-400 hover:text-teal-600 transition-colors" href="#">Privacy Policy</a>
 <a className="font-['Public_Sans'] text-xs text-slate-500 dark:text-slate-400 hover:text-teal-600 transition-colors" href="#">Support</a>

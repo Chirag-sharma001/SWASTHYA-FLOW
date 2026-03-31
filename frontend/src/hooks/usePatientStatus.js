@@ -9,6 +9,25 @@ export function usePatientStatus(tokenId) {
   const [estimatedWait, setEstimatedWait] = useState(0);
 
   useEffect(() => {
+    if (!tokenId || tokenId === 'demo') {
+      // If no tokenId or 'demo', show the currently called patient
+      const called = queue.find(t => t.status === 'called');
+      if (called) {
+        setToken(called);
+        setEstimatedWait(0);
+      } else {
+        // If nothing is called, show the first pending patient but with wait time
+        const firstPending = queue.find(t => t.status === 'pending');
+        if (firstPending) {
+          setToken(firstPending);
+          setEstimatedWait(firstPending.estimatedWait || 300);
+        } else {
+          setToken(null);
+          setEstimatedWait(0);
+        }
+      }
+      return;
+    }
     // Attempt local state matching first
     let currentToken = queue.find(t => t.tokenId === tokenId);
     
@@ -19,20 +38,7 @@ export function usePatientStatus(tokenId) {
       });
     } else if (currentToken) {
       setToken(currentToken);
-      
-      // Calculate Wait Estimator
-      const pendingQueue = queue.filter(t => t.status === 'pending');
-      const position = pendingQueue.findIndex(t => t.tokenId === tokenId);
-      
-      if (position >= 0) {
-        if (session && session.consultationDurations) {
-          setEstimatedWait(estimateWait(position + 1, session.consultationDurations));
-        } else {
-          setEstimatedWait((position + 1) * 300); // 5 mins fallback
-        }
-      } else {
-        setEstimatedWait(0);
-      }
+      setEstimatedWait(currentToken.estimatedWait || 0);
     }
   }, [queue, tokenId, isOnline, session]);
 

@@ -21,7 +21,7 @@ export default function DoctorPanel() {
     ? Math.round(consultDurations.slice(-5).reduce((a, b) => a + b, 0) / Math.min(consultDurations.length, 5) / 60)
     : 0;
   const nextEtaMin = pendingQueue.length > 0
-    ? Math.round(estimateWait(1, consultDurations) / 60)
+    ? Math.round((pendingQueue[0].estimatedWait || 0) / 60)
     : 0;
 
   // Consultation timer
@@ -40,23 +40,54 @@ export default function DoctorPanel() {
   const timerDisplay = `${String(Math.floor(timer / 60)).padStart(2, '0')}:${String(timer % 60).padStart(2, '0')}`;
 
   const handleStartSession = async () => {
+    if (!isOnline) {
+      alert('You are offline. Please reconnect to start a new session.');
+      return;
+    }
     setSessionStarting(true);
     try {
+      console.log('Starting session with doctor:', doctorName);
       await startSession(doctorName);
+      console.log('Session started successfully');
+    } catch (err) {
+      console.error('Failed to start session:', err);
+      alert('Failed to start session: ' + (err.message || 'Unknown error'));
     } finally {
       setSessionStarting(false);
     }
   };
 
   const handleCallNext = async () => {
+    if (!isOnline) {
+      alert('You are offline. Reconnect to call next patient.');
+      return;
+    }
     setActionLoading(true);
     try { await callNext(); } finally { setActionLoading(false); }
   };
 
   const handleComplete = async () => {
+    if (!isOnline) {
+      alert('You are offline. Reconnect to complete consultation.');
+      return;
+    }
     if (!calledToken) return;
     setActionLoading(true);
     try { await completeConsultation(calledToken.tokenId); } finally { setActionLoading(false); }
+  };
+
+  const handleEndSession = async () => {
+    if (!isOnline) {
+      alert('You are offline. Reconnect to end session.');
+      return;
+    }
+    if (confirm('Are you sure you want to end this session?')) {
+      try {
+        await endSession();
+      } catch (err) {
+        alert('Failed to end session: ' + (err.message || 'Unknown error'));
+      }
+    }
   };
 
   return (
@@ -97,7 +128,7 @@ export default function DoctorPanel() {
 {session ? (
   <button
     className="w-full py-3 bg-error text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 active:scale-95 transition-all shadow-md"
-    onClick={endSession}
+    onClick={handleEndSession}
   >
     <span className="material-symbols-outlined">stop_circle</span>
     End Session

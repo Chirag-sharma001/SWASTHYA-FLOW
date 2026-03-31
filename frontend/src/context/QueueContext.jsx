@@ -60,18 +60,16 @@ export function QueueProvider({ children }) {
       }
     };
 
-    if (!isOnline) {
-      loadFromOffline();
-    }
+    loadFromOffline();
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [isOnline]);
+  }, []); // Remove isOnline from dependency to run once on mount
 
   useEffect(() => {
-    socketService.connect();
+    socketService.connect(state.session?.sessionId);
 
     socketService.on('NEW_PATIENT_JOINED', (data) => dispatch({ type: 'NEW_PATIENT_JOINED', payload: data }));
     socketService.on('CALL_NEXT_PATIENT', (data) => dispatch({ type: 'CALL_NEXT_PATIENT', payload: data }));
@@ -82,7 +80,7 @@ export function QueueProvider({ children }) {
     return () => {
       socketService.disconnect();
     };
-  }, []);
+  }, [state.session?.sessionId]);
 
   return (
     <QueueContext.Provider value={{

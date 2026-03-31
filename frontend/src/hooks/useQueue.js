@@ -28,6 +28,11 @@ export function useQueue() {
     try {
       const data = await apiService.callNext(session.sessionId);
       dispatch({ type: 'CALL_NEXT_PATIENT', payload: data });
+      
+      if (data.queue) {
+        await db.queue.clear();
+        await db.queue.bulkAdd(data.queue);
+      }
     } catch (err) {
       console.error('Error calling next patient:', err);
       throw err;
@@ -38,7 +43,12 @@ export function useQueue() {
     if (!isOnline) return;
     try {
       const data = await apiService.completeConsultation(tokenId);
-      dispatch({ type: 'QUEUE_UPDATED', payload: { queue: data.queue } });
+      dispatch({ type: 'QUEUE_UPDATED', payload: data });
+      
+      if (data.queue) {
+        await db.queue.clear();
+        await db.queue.bulkAdd(data.queue);
+      }
     } catch (err) {
       console.error('Error completing consultation:', err);
       throw err;

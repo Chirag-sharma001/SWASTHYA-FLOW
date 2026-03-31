@@ -57,7 +57,7 @@ exports.createToken = async (req, res, next) => {
     const queue = await getPopulatedQueue(sessionId);
     emitToSession(sessionId, 'NEW_PATIENT_JOINED', { token: tokenObj, queue });
 
-    res.status(201).json(tokenObj);
+    res.status(201).json({ token: tokenObj, queue });
   } catch (err) {
     next(err);
   }
@@ -105,7 +105,7 @@ exports.getQueue = async (req, res, next) => {
   try {
     const { sessionId } = req.params;
     const queue = await getPopulatedQueue(sessionId);
-    res.json(queue);
+    res.json({ queue });
   } catch (err) {
     next(err);
   }
@@ -126,13 +126,14 @@ exports.callNext = async (req, res, next) => {
     }
 
     const queue = await getPopulatedQueue(sessionId);
-    emitToSession(sessionId, 'CALL_NEXT_PATIENT', { 
+    const payload = { 
       tokenId: token.tokenId, 
       tokenNumber: token.tokenNumber, 
       queue 
-    });
+    };
+    emitToSession(sessionId, 'CALL_NEXT_PATIENT', payload);
 
-    res.json(token);
+    res.json(payload);
   } catch (err) {
     next(err);
   }
@@ -160,9 +161,10 @@ exports.completeConsultation = async (req, res, next) => {
     );
 
     const queue = await getPopulatedQueue(token.sessionId);
-    emitToSession(token.sessionId, 'QUEUE_UPDATED', { queue });
+    const payload = { queue };
+    emitToSession(token.sessionId, 'QUEUE_UPDATED', payload);
 
-    res.json(token);
+    res.json(payload);
   } catch (err) {
     next(err);
   }

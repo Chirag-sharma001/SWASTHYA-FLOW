@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
 async function fetchHelper(url, options = {}) {
   const response = await fetch(`${BASE_URL}${url}`, {
@@ -51,7 +51,7 @@ export const apiService = {
   },
 
   async getQueue(sessionId) {
-    return fetchHelper(`/api/queue/${sessionId}`, {
+    return fetchHelper(`/api/tokens/queue/${sessionId}`, {
       method: 'GET'
     });
   },
@@ -66,6 +66,13 @@ export const apiService = {
   async completeConsultation(tokenId) {
     return fetchHelper(`/api/tokens/${tokenId}/complete`, {
       method: 'POST'
+    });
+  },
+
+  async bulkSync(tokens) {
+    return fetchHelper('/api/tokens/bulk-sync', {
+      method: 'POST',
+      body: JSON.stringify({ tokens })
     });
   }
 };

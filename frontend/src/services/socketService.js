@@ -1,14 +1,19 @@
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
 class SocketService {
   constructor() {
     this.socket = null;
     this.listeners = new Map();
+    this.currentSessionId = null;
   }
 
-  connect() {
+  connect(sessionId) {
+    if (sessionId) {
+      this.currentSessionId = sessionId;
+    }
+
     if (!this.socket) {
       this.socket = io(SOCKET_URL, {
         reconnectionDelayMax: 30000,
@@ -16,10 +21,18 @@ class SocketService {
         randomizationFactor: 0.5,
       });
 
+      this.socket.on('connect', () => {
+        if (this.currentSessionId) {
+          this.socket.emit('join_session', this.currentSessionId);
+        }
+      });
+
       // Bind all registered listeners to the new socket
       for (const [event, callbacks] of this.listeners.entries()) {
         callbacks.forEach(cb => this.socket.on(event, cb));
       }
+    } else if (this.socket.connected && sessionId) {
+      this.socket.emit('join_session', sessionId);
     }
   }
 
