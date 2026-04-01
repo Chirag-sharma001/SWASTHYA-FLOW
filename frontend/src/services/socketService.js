@@ -1,7 +1,8 @@
 import { io } from 'socket.io-client';
 
-// With the Vite proxy, Socket.io connects to the same origin (proxied to backend).
-const SOCKET_URL = window.location.origin;
+// In production (Vercel), connect directly to the backend URL.
+// In dev, the Vite proxy handles it via the same origin.
+const SOCKET_URL = import.meta.env.VITE_API_URL || window.location.origin;
 
 class SocketService {
   constructor() {

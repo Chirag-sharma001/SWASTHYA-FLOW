@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: swasthya-flow-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/sessions/active
+    envVars:
+      - key: PORT
+        value: 5001
+      - key: NODE_ENV
+        value: production
+      - key: MONGO_URI
+        sync: false          # Set this manually in Render dashboard
+      - key: FRONTEND_URL
+        sync: false          # Set to your Vercel URL after deploying frontend
+      - key: TWILIO_MOCK_MODE
+        value: true          # Set to false and fill creds when ready for SMS
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_WHATSAPP_FROM
+        value: "whatsapp:+14155238886"
+      - key: TWILIO_SMS_FROM
+        sync: false
