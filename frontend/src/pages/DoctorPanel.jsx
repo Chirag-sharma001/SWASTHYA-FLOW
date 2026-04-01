@@ -6,12 +6,13 @@ import { estimateWait } from '../utils/waitEstimator';
 
 export default function DoctorPanel() {
   const navigate = useNavigate();
-  const { queue, session, isOnline, callNext, completeConsultation, startSession, endSession } = useQueue();
+  const { queue, session, isOnline, callNext, skipPatient, completeConsultation, startSession, endSession } = useQueue();
 
   const [doctorName, setDoctorName] = useState('Dr. Ananya Sharma');
   const [sessionStarting, setSessionStarting] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [timer, setTimer] = useState(0);
+  const [viewerOpen, setViewerOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showFullQueue, setShowFullQueue] = useState(false);
 
@@ -262,7 +263,14 @@ export default function DoctorPanel() {
 <div className="flex-1 space-y-6 text-center md:text-left">
 <div>
 <span className="text-primary font-black text-6xl font-headline tracking-tighter">T-{calledToken.tokenNumber}</span>
-<h3 className="text-3xl font-bold text-on-surface mt-2">{calledToken.patientName}</h3>
+<h3 className="text-3xl font-bold text-on-surface mt-2 flex items-center gap-3">
+  {calledToken.patientName}
+  {calledToken.patientProfile?.allergies?.length > 0 && (
+    <span className="inline-flex items-center gap-1 bg-error text-white text-xs font-black px-3 py-1 rounded-full uppercase tracking-widest">
+      <span className="material-symbols-outlined text-sm">warning</span> Severe Allergies
+    </span>
+  )}
+</h3>
 <p className="text-on-surface-variant font-medium mt-1">Session: {calledToken.sessionId}</p>
 </div>
 </div>
@@ -282,13 +290,26 @@ export default function DoctorPanel() {
 </div>
 
 <div className="grid grid-cols-1 sm:grid-cols-3 gap-0 border-t border-slate-100">
-<button className="py-6 flex flex-col items-center justify-center gap-2 hover:bg-slate-50 transition-colors group">
-<span className="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors text-3xl">skip_next</span>
-<span className="text-sm font-bold text-on-surface">Skip / No Show</span>
+<button
+  className="py-6 flex flex-col items-center justify-center gap-2 hover:bg-red-50 transition-colors group disabled:opacity-60"
+  onClick={async () => {
+    if (!calledToken || actionLoading) return;
+    if (confirm(`Skip / No-Show: ${calledToken.patientName} (T-${calledToken.tokenNumber})?`)) {
+      setActionLoading(true);
+      try { await skipPatient(calledToken.tokenId); } catch (err) { alert('Skip failed: ' + err.message); } finally { setActionLoading(false); }
+    }
+  }}
+  disabled={actionLoading || !calledToken}
+>
+<span className="material-symbols-outlined text-on-surface-variant group-hover:text-error transition-colors text-3xl">skip_next</span>
+<span className="text-sm font-bold text-on-surface group-hover:text-error">Skip / No Show</span>
 </button>
-<button className="py-6 flex flex-col items-center justify-center gap-2 hover:bg-slate-50 transition-colors group border-x border-slate-100">
-<span className="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors text-3xl">record_voice_over</span>
-<span className="text-sm font-bold text-on-surface">Recall Patient</span>
+<button 
+  className="py-6 flex flex-col items-center justify-center gap-2 hover:bg-slate-50 transition-colors group border-x border-slate-100"
+  onClick={() => setViewerOpen(true)}
+>
+<span className="material-symbols-outlined text-tertiary group-hover:text-tertiary-600 transition-colors text-3xl">medical_information</span>
+<span className="text-sm font-bold text-on-surface">Medical History</span>
 </button>
 <button
   className="py-6 flex flex-col items-center justify-center gap-2 bg-primary hover:bg-primary-container transition-colors group disabled:opacity-60"
@@ -434,6 +455,46 @@ export default function DoctorPanel() {
         )}
       </div>
     </nav>
+  </div>
+)}
+
+{viewerOpen && calledToken && (
+  <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="absolute inset-0 z-[-1]" onClick={() => setViewerOpen(false)}></div>
+    <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-2xl overflow-hidden shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] animate-in zoom-in-95">
+      <div className="bg-tertiary text-on-tertiary px-6 py-5 flex justify-between items-center">
+        <h2 className="font-bold text-xl flex items-center gap-2 font-headline tracking-tight"><span className="material-symbols-outlined">health_metrics</span> Health Passport</h2>
+        <button onClick={() => setViewerOpen(false)} className="hover:opacity-70 bg-black/10 rounded-full p-2 grid place-items-center"><span className="material-symbols-outlined">close</span></button>
+      </div>
+      <div className="p-8 grid grid-cols-2 gap-6 bg-slate-50 dark:bg-slate-950/50">
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+           <div className="absolute top-0 right-0 w-16 h-16 bg-rose-50 rounded-bl-[100px] -z-10"></div>
+           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1 text-rose-800">Blood Group</p>
+           <p className="text-4xl font-black text-rose-600 drop-shadow-sm">{calledToken.patientProfile?.bloodGroup || 'N/A'}</p>
+        </div>
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Emergency Contact</p>
+           <p className="text-xl font-bold flex items-center gap-2 text-slate-800 dark:text-slate-200"><span className="material-symbols-outlined text-tertiary bg-tertiary/10 p-1.5 rounded-lg">call</span> <a href={`tel:${calledToken.patientProfile?.emergencyContact}`} className="hover:underline hover:text-tertiary transition-colors">{calledToken.patientProfile?.emergencyContact || 'N/A'}</a></p>
+        </div>
+        <div className="col-span-2 bg-error/5 p-6 rounded-2xl border border-error/20 inline-flex flex-col">
+           <p className="text-xs font-extrabold text-error uppercase tracking-widest mb-1 flex items-center gap-1.5"><span className="material-symbols-outlined text-sm bg-error text-white p-0.5 rounded">warning</span> Registered Allergies</p>
+           <p className="text-xl font-bold text-error mt-2">{calledToken.patientProfile?.allergies?.length ? calledToken.patientProfile.allergies.join(', ') : 'None Verified'}</p>
+        </div>
+        <div className="col-span-2 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm inline-flex flex-col">
+           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Chronic Diseases</p>
+           <p className="text-lg font-medium text-slate-700 dark:text-slate-300 mt-2">{calledToken.patientProfile?.chronicDiseases?.length ? calledToken.patientProfile.chronicDiseases.join(', ') : 'None Reported'}</p>
+        </div>
+      </div>
+      <div className="p-5 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center rounded-b-3xl">
+         <a href={`/emergency/${calledToken?.tokenId}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-5 py-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-bold transition-all text-sm group">
+            <span className="material-symbols-outlined text-sm text-slate-400 group-hover:text-slate-600 transition-colors">open_in_new</span>
+            Open Public Report & PDF
+         </a>
+         <button onClick={() => setViewerOpen(false)} className="px-6 py-3 bg-tertiary text-on-tertiary rounded-xl font-bold flex items-center gap-2 hover:opacity-90 active:scale-95 transition-all shadow-md">
+            Close 
+         </button>
+      </div>
+    </div>
   </div>
 )}
 

@@ -22,6 +22,14 @@ export default function ReceptionPanel() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showAbha, setShowAbha] = useState(false);
 
+  const [step, setStep] = useState(1);
+  const [bloodGroup, setBloodGroup] = useState('');
+  const [allergies, setAllergies] = useState('');
+  const [chronic, setChronic] = useState('');
+  const [emergencyContact, setEmergencyContact] = useState('');
+  const [priority, setPriority] = useState('normal');
+  const [department, setDepartment] = useState('General OPD');
+
   // Called when ABHA verification succeeds — auto-fills the form
   const handleAbhaVerified = (profile) => {
     setPatientName(profile.name || '');
@@ -33,10 +41,44 @@ export default function ReceptionPanel() {
 
   const waitingQueue = queue.filter(t => t.status === 'pending');
   const emergencyCount = queue.filter(t => t.status === 'pending' && t.priority === 'emergency').length;
+  const cardiologyCount = queue.filter(t => t.status !== 'completed' && t.department === 'Cardiology').length;
   const consultDurations = session?.consultationDurations ?? [];
   const avgWaitSec = waitingQueue.length > 0
     ? (waitingQueue[0].estimatedWait || 0) / 60
     : 0;
+
+  const handleNextStep = (e) => {
+    e.preventDefault();
+    if (!patientName.trim()) return;
+    setStep(2);
+  };
+
+  const MAKE_WEBHOOK = 'https://hook.eu2.make.com/yjzi4wem0xnonfb4pgdun3qbi2ux4yhn';
+  const [callingTokenId, setCallingTokenId] = useState(null);
+
+  const handleCallPatient = async (token) => {
+    if (callingTokenId === token.tokenId) return;
+    setCallingTokenId(token.tokenId);
+    try {
+      await fetch(MAKE_WEBHOOK, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tokenNumber: token.tokenNumber,
+          patientName: token.patientName,
+          department: token.department || 'General OPD',
+          priority: token.priority || 'normal',
+          sessionId: token.sessionId,
+          tokenId: token.tokenId,
+          calledAt: new Date().toISOString()
+        })
+      });
+    } catch (err) {
+      console.error('[Make.com] Webhook call failed:', err);
+    } finally {
+      setCallingTokenId(null);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -48,13 +90,35 @@ export default function ReceptionPanel() {
     setSubmitting(true);
     setError(null);
     try {
-      const token = await createTokenWithSync(patientName.trim(), session.sessionId, abhaAddress || undefined, patientPhone.trim() || undefined);
+      const patientProfile = {
+        bloodGroup: bloodGroup || null,
+        allergies: allergies.split(',').map(a => a.trim()).filter(Boolean),
+        chronicDiseases: chronic.split(',').map(c => c.trim()).filter(Boolean),
+        emergencyContact: emergencyContact || null
+      };
+
+      const token = await createTokenWithSync(
+        patientName.trim(), 
+        session.sessionId, 
+        abhaAddress || undefined, 
+        patientPhone.trim() || undefined,
+        patientProfile,
+        priority,
+        department
+      );
       setLastToken(token);
       setPatientName('');
       setPatientAge('');
       setPatientGender('Select');
       setPatientPhone('');
       setAbhaAddress('');
+      setBloodGroup('');
+      setAllergies('');
+      setChronic('');
+      setEmergencyContact('');
+      setPriority('normal');
+      setDepartment('General OPD');
+      setStep(1);
     } catch (err) {
       setError(err.message || 'Failed to issue token');
     } finally {
@@ -262,7 +326,9 @@ export default function ReceptionPanel() {
   </div>
 )}
 
-<form className="space-y-5" onSubmit={handleSubmit}>
+<form className="space-y-5" onSubmit={step === 1 ? handleNextStep : handleSubmit}>
+{step === 1 && (
+<div className="space-y-5 animate-in fade-in slide-in-from-bottom-2">
 <div className="space-y-1">
 <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wide">Patient Name</label>
 <input
@@ -301,7 +367,7 @@ export default function ReceptionPanel() {
 </div>
 </div>
 <div className="space-y-1">
-<label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wide">WhatsApp Number (for alerts)</label>
+<label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wide">WhatsApp Number</label>
 <input
   className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary transition-all text-sm"
   placeholder="+91XXXXXXXXXX"
@@ -312,12 +378,10 @@ export default function ReceptionPanel() {
 </div>
 <div className="space-y-1">
 <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wide">Department</label>
-<select className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary transition-all text-sm">
+<select className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary transition-all text-sm" value={department} onChange={e => setDepartment(e.target.value)}>
 <option>General OPD</option>
 <option>Pediatrics</option>
 <option>Cardiology</option>
-<option>Orthopedics</option>
-<option>Dermatology</option>
 </select>
 </div>
 <div className="space-y-1">
@@ -325,31 +389,84 @@ export default function ReceptionPanel() {
 <select className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary transition-all text-sm">
 <option>Dr. Ananya Sharma (Available)</option>
 <option>Dr. Robert Miller (In Consultation)</option>
-<option>Dr. Sarah Chen (On Break)</option>
 </select>
 </div>
 <div className="space-y-2 pt-2">
 <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wide">Priority Level</label>
 <div className="grid grid-cols-3 gap-2">
-<button className="py-2 text-xs font-bold rounded-lg border-2 border-primary bg-primary/5 text-primary" type="button">Normal</button>
-<button className="py-2 text-xs font-bold rounded-lg border border-outline-variant text-on-surface-variant hover:bg-surface-container" type="button">Urgent</button>
-<button className="py-2 text-xs font-bold rounded-lg border border-outline-variant text-on-surface-variant hover:bg-error/5 hover:text-error hover:border-error" type="button">Emergency</button>
+{[['normal','Normal','text-primary border-primary bg-primary/5'],['urgent','Urgent','text-amber-700 border-amber-400 bg-amber-50'],['emergency','Emergency','text-error border-error bg-error/5']].map(([val, label, activeClass]) => (
+  <button
+    key={val}
+    type="button"
+    onClick={() => setPriority(val)}
+    className={`py-2 text-xs font-bold rounded-lg border-2 transition-all ${priority === val ? activeClass : 'border-outline-variant text-on-surface-variant hover:bg-surface-container'}`}
+  >
+    {priority === val && val === 'emergency' && <span className="material-symbols-outlined text-xs align-middle mr-0.5">warning</span>}
+    {label}
+  </button>
+))}
 </div>
 </div>
-{error && <p className="text-xs text-error font-semibold">{error}</p>}
-{lastToken && (
-  <div className="bg-secondary-container/30 border border-secondary/20 rounded-xl px-4 py-3 text-sm text-on-secondary-container font-semibold">
-    ✓ Issued Token #{lastToken.tokenNumber} for {lastToken.patientName}
-    {lastToken.syncStatus === 'pending_sync' && <span className="ml-2 text-amber-600">(offline – will sync)</span>}
-  </div>
-)}
+
 <button
   className="w-full py-4 bg-primary text-white rounded-xl font-bold font-headline shadow-lg shadow-primary/30 hover:shadow-xl hover:translate-y-[-1px] transition-all mt-4 disabled:opacity-60"
+  type="submit"
+>
+  Next: Health Passport <span className="material-symbols-outlined align-middle text-sm ml-1">arrow_forward</span>
+</button>
+</div>
+)}
+
+{step === 2 && (
+<div className="space-y-5 animate-in fade-in slide-in-from-bottom-2">
+<div className="flex items-center gap-2 mb-2 text-primary">
+<span className="material-symbols-outlined" data-icon="health_metrics">health_metrics</span>
+<h3 className="font-bold text-sm uppercase tracking-wider">Health Passport</h3>
+</div>
+<div className="grid grid-cols-2 gap-4">
+<div className="space-y-1">
+<label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wide">Blood Group</label>
+<select className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-xl focus:ring-2 focus:ring-primary text-sm" value={bloodGroup} onChange={e => setBloodGroup(e.target.value)}>
+  <option value="">Select</option>
+  <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
+  <option>O+</option><option>O-</option><option>AB+</option><option>AB-</option>
+</select>
+</div>
+<div className="space-y-1">
+<label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wide">Emergency Contact</label>
+<input type="tel" className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-xl focus:ring-2 focus:ring-primary text-sm" placeholder="Phone Number" value={emergencyContact} onChange={e => setEmergencyContact(e.target.value)} />
+</div>
+</div>
+<div className="space-y-1">
+<label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wide">Known Allergies</label>
+<input type="text" className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-xl focus:ring-2 focus:ring-primary text-sm" placeholder="Peanuts, Penicillin (comma separated)" value={allergies} onChange={e => setAllergies(e.target.value)} />
+</div>
+<div className="space-y-1">
+<label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wide">Chronic Diseases</label>
+<input type="text" className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-xl focus:ring-2 focus:ring-primary text-sm" placeholder="Diabetes, Hypertension, etc." value={chronic} onChange={e => setChronic(e.target.value)} />
+</div>
+
+{error && <p className="text-xs text-error font-semibold">{error}</p>}
+
+<div className="flex gap-3 mt-4">
+<button type="button" className="w-1/3 py-4 bg-surface-container-high text-on-surface rounded-xl font-bold hover:bg-surface-container-highest transition-all" onClick={() => setStep(1)}>Back</button>
+<button
+  className="w-2/3 py-4 bg-primary text-white rounded-xl font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-60"
   type="submit"
   disabled={submitting}
 >
   {submitting ? 'Issuing…' : `Issue Token #${queue.length + 1}`}
 </button>
+</div>
+</div>
+)}
+
+{lastToken && step === 1 && (
+<div className="bg-secondary-container/30 border border-secondary/20 rounded-xl px-4 py-3 text-sm text-on-secondary-container font-semibold mt-4">
+  ✓ Issued Token #{lastToken.tokenNumber} for {lastToken.patientName}
+  {lastToken.syncStatus === 'pending_sync' && <span className="ml-2 text-amber-600">(offline – will sync)</span>}
+</div>
+)}
 </form>
 </div>
 <div className="mt-8 bg-tertiary-container/20 p-6 rounded-2xl border border-tertiary/10">
@@ -391,6 +508,7 @@ export default function ReceptionPanel() {
 <th className="px-6 py-4">Patient Name</th>
 <th className="px-6 py-4">Status</th>
 <th className="px-6 py-4">ETA</th>
+<th className="px-6 py-4 text-center">Call</th>
 <th className="px-6 py-4 text-right">Sync</th>
 </tr>
 </thead>
@@ -423,7 +541,24 @@ export default function ReceptionPanel() {
         </span>
       </td>
       <td className="px-6 py-5 text-sm font-medium text-on-surface-variant">
-        {isCalled ? 'At Door' : isCompleted ? '–' : etaMin > 0 ? `${etaMin}m` : '–'}
+        {isCalled ? <span className="text-primary font-bold">At Door</span> : isCompleted ? '–' : etaMin > 0 ? `~${etaMin}m` : etaSec > 0 ? '< 1m' : <span className="text-on-surface-variant/50">Pending</span>}
+      </td>
+      <td className="px-6 py-5 text-center">
+        {!isCompleted && (
+          <button
+            onClick={() => handleCallPatient(token)}
+            disabled={callingTokenId === token.tokenId}
+            title="Notify patient via Make.com"
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              isCalled
+                ? 'bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20'
+                : 'bg-surface-container text-on-surface-variant border border-outline-variant/30 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300'
+            } disabled:opacity-40 disabled:cursor-wait`}
+          >
+            <span className="material-symbols-outlined text-sm">{callingTokenId === token.tokenId ? 'hourglass_empty' : 'campaign'}</span>
+            {callingTokenId === token.tokenId ? 'Calling…' : 'Call'}
+          </button>
+        )}
       </td>
       <td className="px-6 py-5 text-right">
         {isOffline && <span className="text-xs text-amber-600 font-bold">Pending</span>}
@@ -463,7 +598,7 @@ export default function ReceptionPanel() {
 </div>
 <div>
 <h4 className="font-bold text-sm">Cardiology</h4>
-<p className="text-xs text-on-surface-variant">{emergencyCount} Emergency • Priority</p>
+<p className="text-xs text-on-surface-variant">{cardiologyCount} Active • {emergencyCount} Emergency</p>
 </div>
 <div className="ml-auto">
 <span className={`w-2 h-2 rounded-full ${emergencyCount > 0 ? 'bg-red-500' : 'bg-amber-500'} inline-block`}></span>

@@ -18,7 +18,7 @@ export default function RoleSelection() {
 <p className="font-label text-on-surface-variant font-medium tracking-wide uppercase text-sm">OPD Management System</p>
 </header>
 
-<div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-6xl">
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-7xl">
 
 <div className="group relative flex flex-col items-center p-8 rounded-xl bg-surface-container-lowest border border-outline-variant/15 surface-glow transition-all duration-300 hover:-translate-y-2 hover:shadow-xl">
 <div className="w-20 h-20 rounded-full bg-secondary-container flex items-center justify-center mb-8 transition-transform duration-300 group-hover:scale-110">
@@ -56,6 +56,22 @@ export default function RoleSelection() {
                 </p>
 <button onClick={() => navigate('/patient/demo')} className="w-full py-4 px-6 clinical-gradient text-white font-headline font-bold rounded-lg shadow-sm active:scale-95 transition-all">
                     Launch Status Board
+                </button>
+</div>
+
+<div className="group relative flex flex-col items-center p-8 rounded-xl border-2 border-dashed border-teal-300 bg-gradient-to-br from-teal-50 to-emerald-50 surface-glow transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:border-teal-400">
+<div className="w-20 h-20 rounded-full bg-teal-100 flex items-center justify-center mb-8 transition-transform duration-300 group-hover:scale-110">
+<span className="material-symbols-outlined text-teal-700 text-4xl" data-icon="map">map</span>
+</div>
+<h2 className="font-headline font-bold text-2xl text-teal-800 mb-4 text-center">Hospital Map</h2>
+<div className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1 rounded-full mb-3">
+  ⭐ Medical Migration
+</div>
+<p className="text-teal-700 text-center leading-relaxed mb-10 flex-grow">
+                    Find nearby hospitals, compare affordability, check Ayushman eligibility &amp; get smart recommendations.
+                </p>
+<button onClick={() => navigate('/hospital-map')} className="w-full py-4 px-6 text-white font-headline font-bold rounded-lg shadow-sm active:scale-95 transition-all" style={{background: 'linear-gradient(135deg, #0d9488, #0f766e)'}}>
+                    Explore Hospital Map
                 </button>
 </div>
 </div>

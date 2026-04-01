@@ -63,15 +63,24 @@ export const apiService = {
     });
   },
 
-  async createToken(patientName, sessionId, abhaAddress, phoneNumber) {
+  async createToken(patientName, sessionId, abhaAddress, phoneNumber, patientProfile, priority, department) {
     return fetchHelper('/api/tokens', {
       method: 'POST',
       body: JSON.stringify({
         patientName,
         sessionId,
         ...(abhaAddress && { abhaAddress }),
-        ...(phoneNumber && { phoneNumber })
+        ...(phoneNumber && { phoneNumber }),
+        ...(patientProfile && { patientProfile }),
+        priority: priority || 'normal',
+        department: department || 'General OPD'
       })
+    });
+  },
+
+  async skipPatient(tokenId) {
+    return fetchHelper(`/api/tokens/${tokenId}/skip`, {
+      method: 'POST'
     });
   },
 

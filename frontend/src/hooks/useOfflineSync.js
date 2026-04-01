@@ -49,7 +49,7 @@ export function useOfflineSync() {
         const queueData = await apiService.getQueue(session.sessionId);
         dispatch({ type: 'SET_QUEUE', payload: queueData.queue });
         await db.queue.clear();
-        await db.queue.bulkAdd(queueData.queue);
+        await db.queue.bulkPut(queueData.queue);
       }
     } catch (err) {
       console.error('[useOfflineSync] bulk-sync failed:', err);
@@ -60,14 +60,14 @@ export function useOfflineSync() {
     }
   };
 
-  const createTokenWithSync = async (patientName, sessionId, abhaAddress, phoneNumber) => {
+  const createTokenWithSync = async (patientName, sessionId, abhaAddress, phoneNumber, patientProfile, priority, department) => {
     if (isOnline) {
-      const result = await apiService.createToken(patientName, sessionId, abhaAddress, phoneNumber);
+      const result = await apiService.createToken(patientName, sessionId, abhaAddress, phoneNumber, patientProfile, priority, department);
       // result shape: { token, queue }
       if (result.queue) {
         dispatch({ type: 'SET_QUEUE', payload: result.queue });
         await db.queue.clear();
-        await db.queue.bulkAdd(result.queue);
+        await db.queue.bulkPut(result.queue);
       }
       return result.token || result;
     }
@@ -78,6 +78,9 @@ export function useOfflineSync() {
       sessionId,
       abhaAddress: abhaAddress || null,
       phoneNumber: phoneNumber || null,
+      patientProfile: patientProfile || null,
+      priority: priority || 'normal',
+      department: department || 'General OPD',
       createdAt: Date.now(),
       syncStatus: 'pending_sync',
     };

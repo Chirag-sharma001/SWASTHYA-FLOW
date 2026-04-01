@@ -104,7 +104,7 @@ export function QueueProvider({ children }) {
             const fresh = await apiService.getQueue(serverSession.sessionId);
             dispatch({ type: 'SET_QUEUE', payload: fresh.queue });
             await db.queue.clear();
-            if (fresh.queue.length > 0) await db.queue.bulkAdd(fresh.queue);
+            if (fresh.queue.length > 0) await db.queue.bulkPut(fresh.queue);
           } catch (e) {
             console.warn('[QueueContext] Queue fetch failed:', e.message);
           }
@@ -127,21 +127,21 @@ export function QueueProvider({ children }) {
     socketService.on('NEW_PATIENT_JOINED', (data) => {
       dispatch({ type: 'NEW_PATIENT_JOINED', payload: data });
       if (data.queue) {
-        db.queue.clear().then(() => db.queue.bulkAdd(data.queue)).catch(() => {});
+        db.queue.clear().then(() => db.queue.bulkPut(data.queue)).catch(() => {});
       }
     });
 
     socketService.on('CALL_NEXT_PATIENT', (data) => {
       dispatch({ type: 'CALL_NEXT_PATIENT', payload: data });
       if (data.queue) {
-        db.queue.clear().then(() => db.queue.bulkAdd(data.queue)).catch(() => {});
+        db.queue.clear().then(() => db.queue.bulkPut(data.queue)).catch(() => {});
       }
     });
 
     socketService.on('QUEUE_UPDATED', (data) => {
       dispatch({ type: 'QUEUE_UPDATED', payload: data });
       if (data.queue) {
-        db.queue.clear().then(() => db.queue.bulkAdd(data.queue)).catch(() => {});
+        db.queue.clear().then(() => db.queue.bulkPut(data.queue)).catch(() => {});
       }
     });
 

@@ -3,6 +3,17 @@ const DoctorSession = require('../models/DoctorSession');
 const Token = require('../models/Token');
 const { emitToSession } = require('../socket');
 
+exports.getActiveSession = async (req, res, next) => {
+  try {
+    const session = await DoctorSession.findOne({ status: 'active' }).lean();
+    if (!session) return res.status(404).json({ error: 'No active session' });
+    const { _id, __v, ...clean } = session;
+    res.json(clean);
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.startSession = async (req, res, next) => {
   try {
     const { doctorName } = req.body;
