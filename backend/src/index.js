@@ -25,14 +25,19 @@ mongoose.connect(process.env.MONGO_URI).then(() => {
   });
 });
 
-// Middleware
+// Middleware — allowed origins: set FRONTEND_URL in production env
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5173',
+  'http://10.228.78.131:5173',
+];
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
 app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://127.0.0.1:5173',
-    'http://10.228.78.131:5173',
-  ]
+  origin: allowedOrigins,
+  credentials: true,
 }));
 app.use(express.json());
 

@@ -1,6 +1,6 @@
-// With the Vite proxy, all /api calls go through the same origin.
-// This works whether the browser opens via localhost or the LAN IP.
-const BASE_URL = '';
+// In dev, Vite proxy forwards /api calls so BASE_URL is empty.
+// In production (Vercel), we call the backend directly via VITE_API_URL.
+const BASE_URL = import.meta.env.VITE_API_URL || '';
 
 async function fetchHelper(url, options = {}) {
   const response = await fetch(`${BASE_URL}${url}`, {
