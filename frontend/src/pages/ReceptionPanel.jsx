@@ -5,16 +5,31 @@ import { useOfflineSync } from '../hooks/useOfflineSync';
 import { estimateWait } from '../utils/waitEstimator';
 import QRSessionCode from '../components/QRSessionCode';
 import SyncStatusBadge from '../components/SyncStatusBadge';
+import AbhaVerification from '../components/AbhaVerification';
 
 export default function ReceptionPanel() {
   const navigate = useNavigate();
   const { createTokenWithSync, isOnline, queue, session, syncing } = useOfflineSync();
 
   const [patientName, setPatientName] = useState('');
+  const [patientAge, setPatientAge] = useState('');
+  const [patientGender, setPatientGender] = useState('Select');
+  const [patientPhone, setPatientPhone] = useState('');
+  const [abhaAddress, setAbhaAddress] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [lastToken, setLastToken] = useState(null);
   const [error, setError] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showAbha, setShowAbha] = useState(false);
+
+  // Called when ABHA verification succeeds — auto-fills the form
+  const handleAbhaVerified = (profile) => {
+    setPatientName(profile.name || '');
+    setPatientAge(profile.age ? String(profile.age) : '');
+    setPatientGender(profile.gender || 'Select');
+    setAbhaAddress(profile.abhaAddress || '');
+    setShowAbha(false);
+  };
 
   const waitingQueue = queue.filter(t => t.status === 'pending');
   const emergencyCount = queue.filter(t => t.status === 'pending' && t.priority === 'emergency').length;
@@ -33,9 +48,13 @@ export default function ReceptionPanel() {
     setSubmitting(true);
     setError(null);
     try {
-      const token = await createTokenWithSync(patientName.trim(), session.sessionId);
+      const token = await createTokenWithSync(patientName.trim(), session.sessionId, abhaAddress || undefined, patientPhone.trim() || undefined);
       setLastToken(token);
       setPatientName('');
+      setPatientAge('');
+      setPatientGender('Select');
+      setPatientPhone('');
+      setAbhaAddress('');
     } catch (err) {
       setError(err.message || 'Failed to issue token');
     } finally {
@@ -206,10 +225,43 @@ export default function ReceptionPanel() {
 
 <aside className="xl:w-1/3 w-full">
 <div className="bg-surface-container-lowest p-8 rounded-2xl shadow-sm">
-<div className="flex items-center gap-2 mb-6">
+<div className="flex items-center justify-between mb-6">
+<div className="flex items-center gap-2">
 <span className="material-symbols-outlined text-primary" data-icon="confirmation_number">confirmation_number</span>
 <h2 className="text-xl font-bold font-headline">Issue New Token</h2>
 </div>
+{/* ABHA verify button */}
+<button
+  type="button"
+  onClick={() => setShowAbha(v => !v)}
+  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border-2 border-[#003087] text-[#003087] text-xs font-bold hover:bg-blue-50 transition-colors"
+>
+  <span className="material-symbols-outlined text-sm">verified_user</span>
+  {showAbha ? 'Hide ABHA' : 'Verify ABHA'}
+</button>
+</div>
+
+{/* ABHA widget — shown inline above the form */}
+{showAbha && (
+  <div className="mb-5">
+    <AbhaVerification onVerified={handleAbhaVerified} onClose={() => setShowAbha(false)} />
+  </div>
+)}
+
+{/* ABHA auto-fill badge */}
+{abhaAddress && (
+  <div className="mb-4 flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl">
+    <span className="material-symbols-outlined text-[#003087] text-sm">verified</span>
+    <div className="flex-1 min-w-0">
+      <p className="text-[10px] font-bold text-[#003087] uppercase tracking-wide">ABHA Verified</p>
+      <p className="text-xs text-slate-600 font-mono truncate">{abhaAddress}</p>
+    </div>
+    <button onClick={() => setAbhaAddress('')} className="text-slate-400 hover:text-red-500 transition-colors">
+      <span className="material-symbols-outlined text-sm">close</span>
+    </button>
+  </div>
+)}
+
 <form className="space-y-5" onSubmit={handleSubmit}>
 <div className="space-y-1">
 <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wide">Patient Name</label>
@@ -226,17 +278,37 @@ export default function ReceptionPanel() {
 <div className="grid grid-cols-2 gap-4">
 <div className="space-y-1">
 <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wide">Age</label>
-<input className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary transition-all text-sm" placeholder="Years" type="number"/>
+<input
+  className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary transition-all text-sm"
+  placeholder="Years"
+  type="number"
+  value={patientAge}
+  onChange={e => setPatientAge(e.target.value)}
+/>
 </div>
 <div className="space-y-1">
 <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wide">Gender</label>
-<select className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary transition-all text-sm">
+<select
+  className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary transition-all text-sm"
+  value={patientGender}
+  onChange={e => setPatientGender(e.target.value)}
+>
 <option>Select</option>
 <option>Male</option>
 <option>Female</option>
 <option>Other</option>
 </select>
 </div>
+</div>
+<div className="space-y-1">
+<label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wide">WhatsApp Number (for alerts)</label>
+<input
+  className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant/40 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary transition-all text-sm"
+  placeholder="+91XXXXXXXXXX"
+  type="tel"
+  value={patientPhone}
+  onChange={e => setPatientPhone(e.target.value)}
+/>
 </div>
 <div className="space-y-1">
 <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wide">Department</label>

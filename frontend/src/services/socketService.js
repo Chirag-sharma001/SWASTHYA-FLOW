@@ -1,6 +1,7 @@
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+// With the Vite proxy, Socket.io connects to the same origin (proxied to backend).
+const SOCKET_URL = window.location.origin;
 
 class SocketService {
   constructor() {
@@ -22,6 +23,18 @@ class SocketService {
       });
 
       this.socket.on('connect', () => {
+        console.log('[Socket] Connected:', this.socket.id);
+        if (this.currentSessionId) {
+          this.socket.emit('join_session', this.currentSessionId);
+        }
+      });
+
+      this.socket.on('disconnect', (reason) => {
+        console.log('[Socket] Disconnected:', reason);
+      });
+
+      this.socket.on('reconnect', () => {
+        console.log('[Socket] Reconnected');
         if (this.currentSessionId) {
           this.socket.emit('join_session', this.currentSessionId);
         }
@@ -31,8 +44,10 @@ class SocketService {
       for (const [event, callbacks] of this.listeners.entries()) {
         callbacks.forEach(cb => this.socket.on(event, cb));
       }
-    } else if (this.socket.connected && sessionId) {
+    } else if (sessionId && this.socket.connected) {
       this.socket.emit('join_session', sessionId);
+    } else if (sessionId && !this.socket.connected) {
+      // Will join on next connect event via currentSessionId
     }
   }
 

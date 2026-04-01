@@ -1,20 +1,53 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { usePatientStatus } from '../hooks/usePatientStatus';
+import { useVoiceAnnouncement } from '../hooks/useVoiceAnnouncement';
+import { QueueContext } from '../context/QueueContext';
+import { socketService } from '../services/socketService';
 
 export default function PatientDisplayPanel() {
   const navigate = useNavigate();
   const { tokenId } = useParams();
   const { token, estimatedWait, isOnline } = usePatientStatus(tokenId);
+  const { session } = useContext(QueueContext);
+
+  // Voice accessibility toggle — persisted in localStorage
+  const [voiceEnabled, setVoiceEnabled] = useState(() => {
+    try { return localStorage.getItem('voiceEnabled') !== 'false'; } catch { return true; }
+  });
+
+  const { announce, unlock } = useVoiceAnnouncement(voiceEnabled);
+
+  const toggleVoice = () => {
+    unlock(); // ensure audio is unlocked on this interaction
+    setVoiceEnabled(v => {
+      const next = !v;
+      try { localStorage.setItem('voiceEnabled', String(next)); } catch {}
+      return next;
+    });
+  };
+
+  // Listen for CALL_NEXT_PATIENT and announce in Hindi
+  useEffect(() => {
+    const handleCallNext = ({ tokenNumber, queue }) => {
+      console.log('[Voice] CALL_NEXT_PATIENT received:', { tokenNumber, queue });
+      
+      // Find the called token to get patient name
+      const called = queue?.find(t => t.tokenNumber === tokenNumber);
+      const name = called?.patientName || 'Patient';
+      
+      console.log('[Voice] Announcing:', { tokenNumber, name, voiceEnabled });
+      announce(tokenNumber, name, 'Doctor Room');
+    };
+
+    socketService.on('CALL_NEXT_PATIENT', handleCallNext);
+    return () => socketService.off('CALL_NEXT_PATIENT', handleCallNext);
+  }, [announce, voiceEnabled]);
 
   // Live clock
   const [clock, setClock] = useState('');
   useEffect(() => {
-    const tick = () => {
-      const now = new Date();
-      setClock(now.toLocaleTimeString('en-IN', { hour12: false }));
-    };
+    const tick = () => setClock(new Date().toLocaleTimeString('en-IN', { hour12: false }));
     tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
@@ -45,7 +78,25 @@ export default function PatientDisplayPanel() {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-12">
+        <div className="flex items-center gap-6">
+          {/* Voice Accessibility Toggle */}
+          <button
+            onClick={toggleVoice}
+            title={voiceEnabled ? 'Voice On — click to disable' : 'Voice Off — click to enable'}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full border-2 font-bold text-sm transition-all ${
+              voiceEnabled
+                ? 'bg-primary border-primary text-white shadow-md'
+                : 'bg-surface-container border-outline-variant text-on-surface-variant'
+            }`}
+          >
+            <span className="material-symbols-outlined text-lg">
+              {voiceEnabled ? 'volume_up' : 'volume_off'}
+            </span>
+            <span className="hidden sm:inline">
+              {voiceEnabled ? 'Voice On' : 'Voice Off'}
+            </span>
+          </button>
+
           <div className={`flex items-center gap-3 px-6 py-3 rounded-full ${isOnline ? 'bg-emerald-100' : 'bg-amber-100'}`}>
             <span className={`inline-block w-3 h-3 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
             <span className={`font-label font-bold text-xl uppercase tracking-wider ${isOnline ? 'text-emerald-700' : 'text-amber-700'}`}>
@@ -124,6 +175,21 @@ export default function PatientDisplayPanel() {
                 <p className="text-sm text-on-surface-variant">Showing current patient status.</p>
               </div>
             )}
+
+            {/* Voice status card */}
+            <div className={`p-4 rounded-2xl border flex items-center gap-3 ${voiceEnabled ? 'bg-primary/5 border-primary/20' : 'bg-surface-container border-outline-variant/20'}`}>
+              <span className={`material-symbols-outlined text-2xl ${voiceEnabled ? 'text-primary' : 'text-on-surface-variant'}`}>
+                {voiceEnabled ? 'record_voice_over' : 'voice_over_off'}
+              </span>
+              <div>
+                <p className="text-sm font-bold text-on-surface">
+                  {voiceEnabled ? 'Hindi Voice Announcements Active' : 'Voice Announcements Off'}
+                </p>
+                <p className="text-xs text-on-surface-variant">
+                  {voiceEnabled ? 'Token numbers announced in Hindi' : 'Tap "Voice On" to enable'}
+                </p>
+              </div>
+            </div>
           </div>
         </section>
       </main>
@@ -138,29 +204,28 @@ export default function PatientDisplayPanel() {
         </div>
       </aside>
 
-<footer className="bg-inverse-surface py-4 px-10">
-<div className="overflow-hidden">
-<div className="flex gap-20 items-center whitespace-nowrap animate-marquee">
-<span className="flex items-center gap-4 text-inverse-on-surface font-label font-medium text-2xl uppercase tracking-widest">
-<span className="material-symbols-outlined text-primary-fixed" data-icon="info">info</span>
-                    Please have your ID ready
-                </span>
-<span className="text-surface-variant opacity-30">|</span>
-<span className="flex items-center gap-4 text-inverse-on-surface font-label font-medium text-2xl uppercase tracking-widest">
-                    कृपया अपनी आईडी तैयार रखें
-                </span>
-<span className="text-surface-variant opacity-30">|</span>
-<span className="flex items-center gap-4 text-inverse-on-surface font-label font-medium text-2xl uppercase tracking-widest">
-                    Maintain social distance
-                </span>
-<span className="text-surface-variant opacity-30">|</span>
-<span className="flex items-center gap-4 text-inverse-on-surface font-label font-medium text-2xl uppercase tracking-widest">
-                    सामाजिक दूरी बनाए रखें
-                </span>
-</div>
-</div>
-</footer>
-
+      <footer className="bg-inverse-surface py-4 px-10">
+        <div className="overflow-hidden">
+          <div className="flex gap-20 items-center whitespace-nowrap animate-marquee">
+            <span className="flex items-center gap-4 text-inverse-on-surface font-label font-medium text-2xl uppercase tracking-widest">
+              <span className="material-symbols-outlined text-primary-fixed">info</span>
+              Please have your ID ready
+            </span>
+            <span className="text-surface-variant opacity-30">|</span>
+            <span className="flex items-center gap-4 text-inverse-on-surface font-label font-medium text-2xl uppercase tracking-widest">
+              कृपया अपनी आईडी तैयार रखें
+            </span>
+            <span className="text-surface-variant opacity-30">|</span>
+            <span className="flex items-center gap-4 text-inverse-on-surface font-label font-medium text-2xl uppercase tracking-widest">
+              Maintain social distance
+            </span>
+            <span className="text-surface-variant opacity-30">|</span>
+            <span className="flex items-center gap-4 text-inverse-on-surface font-label font-medium text-2xl uppercase tracking-widest">
+              सामाजिक दूरी बनाए रखें
+            </span>
+          </div>
+        </div>
+      </footer>
     </>
   );
 }

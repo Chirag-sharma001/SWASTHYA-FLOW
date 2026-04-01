@@ -60,15 +60,15 @@ export function useOfflineSync() {
     }
   };
 
-  const createTokenWithSync = async (patientName, sessionId) => {
+  const createTokenWithSync = async (patientName, sessionId, abhaAddress, phoneNumber) => {
     if (isOnline) {
-      const result = await apiService.createToken(patientName, sessionId);
-      dispatch({ type: 'NEW_PATIENT_JOINED', payload: result });
-
-      // Cache to Dexie
-      const tokenToCache = result.token || result;
-      await db.queue.put({ ...tokenToCache, syncStatus: 'synced' });
-
+      const result = await apiService.createToken(patientName, sessionId, abhaAddress, phoneNumber);
+      // result shape: { token, queue }
+      if (result.queue) {
+        dispatch({ type: 'SET_QUEUE', payload: result.queue });
+        await db.queue.clear();
+        await db.queue.bulkAdd(result.queue);
+      }
       return result.token || result;
     }
 
@@ -76,6 +76,8 @@ export function useOfflineSync() {
     const offlineRecord = {
       patientName,
       sessionId,
+      abhaAddress: abhaAddress || null,
+      phoneNumber: phoneNumber || null,
       createdAt: Date.now(),
       syncStatus: 'pending_sync',
     };

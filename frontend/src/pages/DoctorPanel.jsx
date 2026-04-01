@@ -12,6 +12,8 @@ export default function DoctorPanel() {
   const [sessionStarting, setSessionStarting] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [timer, setTimer] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [showFullQueue, setShowFullQueue] = useState(false);
 
   const calledToken = queue.find(t => t.status === 'called');
   const pendingQueue = queue.filter(t => t.status === 'pending');
@@ -62,8 +64,18 @@ export default function DoctorPanel() {
       alert('You are offline. Reconnect to call next patient.');
       return;
     }
+    if (!session) {
+      alert('No active session. Please start a session first.');
+      return;
+    }
     setActionLoading(true);
-    try { await callNext(); } finally { setActionLoading(false); }
+    try {
+      await callNext();
+    } catch (err) {
+      alert('Failed to call next patient: ' + (err.message || 'Unknown error'));
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleComplete = async () => {
@@ -150,6 +162,10 @@ export default function DoctorPanel() {
 <main className="lg:ml-64 min-h-screen flex flex-col">
 
 <header className="bg-white dark:bg-slate-900 docked full-width top-0 z-50 border-b border-slate-100 dark:border-slate-800 shadow-sm dark:shadow-none flex justify-between items-center w-full px-8 py-4 sticky top-0">
+<div className="flex items-center gap-3">
+<button className="lg:hidden p-1 rounded-md hover:bg-slate-100 transition-colors" onClick={() => setMenuOpen(v => !v)} aria-label="Toggle menu">
+  <span className="material-symbols-outlined text-on-surface-variant">menu</span>
+</button>
 <div className="flex flex-col">
 <h1 className="font-headline font-extrabold text-2xl text-teal-700 dark:text-teal-400 tracking-tight leading-none">{session?.doctorName ?? doctorName}</h1>
 <div className="flex items-center gap-3 mt-1">
@@ -163,7 +179,29 @@ export default function DoctorPanel() {
 {!isOnline && <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-bold rounded-md border border-amber-300">OFFLINE</span>}
 </div>
 </div>
-<div className="flex items-center gap-4">
+</div>
+<div className="flex items-center gap-3">
+{/* Mobile session button — visible only on small screens */}
+<div className="lg:hidden">
+  {session ? (
+    <button
+      className="flex items-center gap-1.5 px-3 py-2 bg-error text-white rounded-xl font-bold text-xs shadow-md active:scale-95 transition-all"
+      onClick={handleEndSession}
+    >
+      <span className="material-symbols-outlined text-sm">stop_circle</span>
+      End
+    </button>
+  ) : (
+    <button
+      className="flex items-center gap-1.5 px-3 py-2 bg-primary text-white rounded-xl font-bold text-xs shadow-md active:scale-95 transition-all disabled:opacity-60"
+      onClick={handleStartSession}
+      disabled={sessionStarting}
+    >
+      <span className="material-symbols-outlined text-sm">add_circle</span>
+      {sessionStarting ? '…' : 'Start'}
+    </button>
+  )}
+</div>
 <div className="hidden md:flex flex-col items-end mr-4">
 <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-tighter">System Status</span>
 <span className={`font-bold text-sm flex items-center gap-1 ${isOnline ? 'text-primary' : 'text-amber-600'}`}>
@@ -270,15 +308,22 @@ export default function DoctorPanel() {
 )}
 
 <button
-  className="w-full py-8 bg-surface-container-highest/30 border-2 border-dashed border-outline-variant/50 rounded-2xl flex flex-col items-center justify-center gap-3 hover:border-primary/50 hover:bg-primary/5 transition-all group disabled:opacity-50"
+  className="w-full py-8 bg-surface-container-highest/30 border-2 border-dashed border-outline-variant/50 rounded-2xl flex flex-col items-center justify-center gap-3 hover:border-primary/50 hover:bg-primary/5 transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
   onClick={handleCallNext}
-  disabled={!session || actionLoading || pendingQueue.length === 0}
+  disabled={actionLoading || pendingQueue.length === 0}
 >
-<div className="w-16 h-16 rounded-full bg-white shadow-sm flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+<div className="w-16 h-16 rounded-full bg-white shadow-sm flex items-center justify-center text-primary group-hover:scale-110 transition-transform group-disabled:scale-100">
 <span className="material-symbols-outlined text-4xl">person_add</span>
 </div>
-<span className="text-xl font-bold text-on-surface">Call Next Patient</span>
-<p className="text-sm text-on-surface-variant">Estimated wait time for next: <span className="font-bold">{nextEtaMin}m</span></p>
+<span className="text-xl font-bold text-on-surface">
+  {actionLoading ? 'Calling…' : pendingQueue.length === 0 ? 'No Patients Waiting' : 'Call Next Patient'}
+</span>
+<p className="text-sm text-on-surface-variant">
+  {pendingQueue.length > 0
+    ? <>Estimated wait for next: <span className="font-bold">{nextEtaMin}m</span></>
+    : !session ? 'Start a session to begin'
+    : 'Queue is empty'}
+</p>
 </button>
 </div>
 
@@ -306,7 +351,7 @@ export default function DoctorPanel() {
   </div>
 ))}
 </div>
-<button className="w-full py-4 text-primary text-xs font-bold uppercase tracking-widest hover:bg-primary/5 transition-colors">View Full Queue</button>
+<button className="w-full py-4 text-primary text-xs font-bold uppercase tracking-widest hover:bg-primary/5 transition-colors" onClick={() => setShowFullQueue(true)}>View Full Queue</button>
 </section>
 
 <section className="bg-surface-container-lowest rounded-2xl shadow-sm border border-outline-variant/10 overflow-hidden">
@@ -337,7 +382,7 @@ export default function DoctorPanel() {
 
 <footer className="w-full border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 mt-auto">
 <div className="flex flex-col md:flex-row justify-between items-center px-8 py-6 w-full">
-<p className="font-['Public_Sans'] text-xs text-slate-500 dark:text-slate-400">© 2024 SwasthQueue Hospital Systems. Demo v1.0.4</p>
+<p className="font-['Public_Sans'] text-xs text-slate-500 dark:text-slate-400">© 2026 SwasthQueue Hospital Systems. Demo v1.0.4</p>
 <div className="flex gap-6 mt-4 md:mt-0">
 <a className="text-slate-400 hover:text-teal-600 transition-colors text-xs font-['Public_Sans']" href="#">Privacy Policy</a>
 <a className="text-slate-400 hover:text-teal-600 transition-colors text-xs font-['Public_Sans']" href="#">Support</a>
@@ -346,6 +391,93 @@ export default function DoctorPanel() {
 </div>
 </footer>
 </main>
+
+{/* Mobile nav overlay */}
+{menuOpen && (
+  <div className="fixed inset-0 z-[70] lg:hidden">
+    <div className="absolute inset-0 bg-black/40" onClick={() => setMenuOpen(false)} />
+    <nav className="absolute left-0 top-0 h-full w-64 bg-slate-50 dark:bg-slate-950 flex flex-col py-6 px-4 space-y-2">
+      <div className="px-4 mb-8 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-white shadow-lg">
+            <span className="material-symbols-outlined">health_and_safety</span>
+          </div>
+          <div>
+            <h2 className="text-xl font-black text-teal-800 dark:text-teal-200 leading-tight">SwasthQueue</h2>
+            <p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">OPD Management</p>
+          </div>
+        </div>
+        <button onClick={() => setMenuOpen(false)} className="p-1 rounded-md hover:bg-slate-200 dark:hover:bg-slate-800">
+          <span className="material-symbols-outlined text-on-surface-variant">close</span>
+        </button>
+      </div>
+      <div className="flex-grow space-y-1">
+        <a className="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-all text-sm font-medium" href="#" onClick={e => { e.preventDefault(); navigate('/'); setMenuOpen(false); }}>
+          <span className="material-symbols-outlined">dashboard</span>Dashboard
+        </a>
+        <a className="flex items-center gap-3 px-3 py-2.5 bg-white dark:bg-slate-900 text-teal-700 shadow-sm rounded-lg text-sm font-semibold" href="#">
+          <span className="material-symbols-outlined">queue</span>Queue
+        </a>
+        <a className="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-all text-sm font-medium" href="#" onClick={e => { e.preventDefault(); navigate('/doctor/history'); setMenuOpen(false); }}>
+          <span className="material-symbols-outlined">history_edu</span>History
+        </a>
+      </div>
+      <div className="mt-auto px-2">
+        {session ? (
+          <button className="w-full py-3 bg-error text-white rounded-xl font-bold flex items-center justify-center gap-2" onClick={() => { handleEndSession(); setMenuOpen(false); }}>
+            <span className="material-symbols-outlined">stop_circle</span>End Session
+          </button>
+        ) : (
+          <button className="w-full py-3 bg-primary text-white rounded-xl font-bold flex items-center justify-center gap-2" onClick={() => { handleStartSession(); setMenuOpen(false); }} disabled={sessionStarting}>
+            <span className="material-symbols-outlined">add_circle</span>{sessionStarting ? 'Starting…' : 'Start Session'}
+          </button>
+        )}
+      </div>
+    </nav>
+  </div>
+)}
+
+{/* Full Queue Modal */}
+{showFullQueue && (
+  <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+    <div className="absolute inset-0 bg-black/50" onClick={() => setShowFullQueue(false)} />
+    <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center gap-2">
+          <h3 className="font-bold text-on-surface text-lg">Full Queue</h3>
+          <span className="bg-surface-container px-2 py-0.5 rounded text-xs font-bold text-on-surface-variant">{pendingQueue.length} Pending</span>
+        </div>
+        <button onClick={() => setShowFullQueue(false)} className="p-1 rounded-lg hover:bg-slate-100 transition-colors">
+          <span className="material-symbols-outlined text-on-surface-variant">close</span>
+        </button>
+      </div>
+      <div className="overflow-y-auto flex-1 divide-y divide-slate-50 dark:divide-slate-800">
+        {queue.length === 0 && (
+          <div className="p-8 text-center text-sm text-on-surface-variant">Queue is empty</div>
+        )}
+        {queue.map((token) => {
+          const isCalled = token.status === 'called';
+          const isCompleted = token.status === 'completed';
+          const etaMin = Math.round((token.estimatedWait || 0) / 60);
+          return (
+            <div key={token.tokenId} className={`flex items-center gap-4 px-6 py-4 ${isCalled ? 'bg-primary/5 border-l-4 border-primary' : isCompleted ? 'opacity-40' : 'hover:bg-slate-50'}`}>
+              <span className={`w-10 h-10 rounded-lg flex items-center justify-center text-xs font-black ${isCalled ? 'bg-primary text-white' : 'bg-surface-container-low text-on-surface'}`}>
+                T-{token.tokenNumber}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-sm text-on-surface truncate">{token.patientName}</p>
+                <p className="text-[10px] text-on-surface-variant">{token.status.toUpperCase()}{token.abhaAddress ? ` · ${token.abhaAddress}` : ''}</p>
+              </div>
+              <span className={`text-xs font-bold px-2 py-1 rounded-md ${isCalled ? 'bg-primary text-white' : isCompleted ? 'bg-surface-container text-on-surface-variant' : 'bg-teal-50 text-teal-700'}`}>
+                {isCalled ? 'At Door' : isCompleted ? 'Done' : etaMin > 0 ? `~${etaMin}m` : 'Pending'}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  </div>
+)}
 
     </>
   );

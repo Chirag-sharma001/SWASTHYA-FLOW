@@ -1,4 +1,6 @@
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+// With the Vite proxy, all /api calls go through the same origin.
+// This works whether the browser opens via localhost or the LAN IP.
+const BASE_URL = '';
 
 async function fetchHelper(url, options = {}) {
   const response = await fetch(`${BASE_URL}${url}`, {
@@ -10,10 +12,11 @@ async function fetchHelper(url, options = {}) {
   });
 
   if (!response.ok) {
-    let message = 'An error occurred';
+    let message = `HTTP ${response.status}`;
     try {
       const data = await response.json();
-      message = data.message || message;
+      // Backend uses { error: '...' } — check both fields
+      message = data.error || data.message || message;
     } catch (e) {
       message = response.statusText || message;
     }
@@ -31,6 +34,10 @@ async function fetchHelper(url, options = {}) {
 }
 
 export const apiService = {
+  async getActiveSession() {
+    return fetchHelper('/api/sessions/active', { method: 'GET' });
+  },
+
   async startSession(doctorName) {
     return fetchHelper('/api/sessions', {
       method: 'POST',
@@ -56,10 +63,15 @@ export const apiService = {
     });
   },
 
-  async createToken(patientName, sessionId) {
+  async createToken(patientName, sessionId, abhaAddress, phoneNumber) {
     return fetchHelper('/api/tokens', {
       method: 'POST',
-      body: JSON.stringify({ patientName, sessionId })
+      body: JSON.stringify({
+        patientName,
+        sessionId,
+        ...(abhaAddress && { abhaAddress }),
+        ...(phoneNumber && { phoneNumber })
+      })
     });
   },
 
@@ -73,6 +85,20 @@ export const apiService = {
     return fetchHelper('/api/tokens/bulk-sync', {
       method: 'POST',
       body: JSON.stringify({ tokens })
+    });
+  },
+
+  async abhaGenerateOtp(mobileOrAbha) {
+    return fetchHelper('/api/abha/generate-otp', {
+      method: 'POST',
+      body: JSON.stringify({ mobileOrAbha })
+    });
+  },
+
+  async abhaVerifyOtp(transactionId, otp) {
+    return fetchHelper('/api/abha/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({ transactionId, otp })
     });
   }
 };
