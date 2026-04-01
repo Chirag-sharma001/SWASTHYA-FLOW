@@ -4,6 +4,7 @@ const Counter = require('../models/Counter');
 const DoctorSession = require('../models/DoctorSession');
 const { emitToSession } = require('../socket');
 const { estimateWait } = require('../utils/predictor');
+const { sendSms } = require('../services/smsService');
 
 async function getPopulatedQueue(sessionId) {
   const queue = await Token.find({ sessionId, status: { $ne: 'completed' } })
@@ -28,7 +29,7 @@ async function getPopulatedQueue(sessionId) {
 
 exports.createToken = async (req, res, next) => {
   try {
-    const { patientName, sessionId } = req.body;
+    const { patientName, sessionId, abhaAddress, phoneNumber, patientProfile, priority, department } = req.body;
     if (!patientName || !sessionId) return res.status(400).json({ error: 'patientName and sessionId are required' });
 
     const session = await DoctorSession.findOne({ sessionId });
@@ -44,7 +45,12 @@ exports.createToken = async (req, res, next) => {
       tokenId: uuidv4(),
       tokenNumber: counter.seq,
       patientName,
-      sessionId
+      sessionId,
+      ...(abhaAddress && { abhaAddress }),
+      ...(phoneNumber && { phoneNumber }),
+      ...(patientProfile && { patientProfile }),
+      priority: priority || 'normal',
+      department: department || 'General OPD'
     });
 
     await token.save();
@@ -133,6 +139,18 @@ exports.callNext = async (req, res, next) => {
     };
     emitToSession(sessionId, 'CALL_NEXT_PATIENT', payload);
 
+    // Find the next pending patient and notify them via SMS
+    const nextPending = await Token.findOne({
+      sessionId,
+      status: 'pending',
+      tokenNumber: { $gt: token.tokenNumber }
+    }).sort({ tokenNumber: 1 }).lean();
+
+    if (nextPending?.phoneNumber) {
+      const msg = `SwasthQueue: Token T-${token.tokenNumber} is now with the doctor. You are NEXT (T-${nextPending.tokenNumber} - ${nextPending.patientName}). Please be ready at the door.`;
+      sendSms(nextPending.phoneNumber, msg).catch(() => {});
+    }
+
     res.json(payload);
   } catch (err) {
     next(err);
@@ -165,6 +183,48 @@ exports.completeConsultation = async (req, res, next) => {
     emitToSession(token.sessionId, 'QUEUE_UPDATED', payload);
 
     res.json(payload);
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.skipPatient = async (req, res, next) => {
+  try {
+    const { id: tokenId } = req.params;
+
+    const token = await Token.findOne({ tokenId });
+    if (!token) return res.status(404).json({ error: 'Token not found' });
+    if (token.status !== 'called') {
+      return res.status(400).json({ error: 'Only called tokens can be skipped' });
+    }
+
+    token.status = 'completed';
+    token.completedAt = Date.now();
+    await token.save();
+
+    // Don't record duration — this was a no-show / skip
+
+    const queue = await getPopulatedQueue(token.sessionId);
+    const payload = { queue };
+    emitToSession(token.sessionId, 'QUEUE_UPDATED', payload);
+
+    res.json(payload);
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.getEmergencyProfile = async (req, res, next) => {
+  try {
+    const { tokenId } = req.params;
+    const token = await Token.findOne({ tokenId }).lean();
+    if (!token) return res.status(404).json({ error: 'Token not found' });
+    
+    res.json({
+      patientName: token.patientName,
+      bloodGroup: token.patientProfile?.bloodGroup || 'N/A',
+      emergencyContact: token.patientProfile?.emergencyContact || 'N/A'
+    });
   } catch (err) {
     next(err);
   }

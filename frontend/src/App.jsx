@@ -8,7 +8,9 @@ import DoctorPanel from './pages/DoctorPanel'
 import PatientDisplayPanel from './pages/PatientDisplayPanel'
 import DailySummary from './pages/DailySummary'
 import DoctorConsultationHistory from './pages/DoctorConsultationHistory'
+import EmergencyView from './pages/EmergencyView'
 import PatientCheckIn from './pages/PatientCheckIn'
+import MedicalMigrationMap from './pages/MedicalMigrationMap'
 
 function App() {
   return (
@@ -22,6 +24,8 @@ function App() {
           <Route path="/patient/:tokenId" element={<PatientDisplayPanel />} />
           <Route path="/daily-summary" element={<DailySummary />} />
           <Route path="/doctor/history" element={<DoctorConsultationHistory />} />
+          <Route path="/emergency/:tokenId" element={<EmergencyView />} />
+          <Route path="/hospital-map" element={<MedicalMigrationMap />} />
         </Routes>
       </BrowserRouter>
     </QueueProvider>

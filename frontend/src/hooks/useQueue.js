@@ -12,7 +12,7 @@ export function useQueue() {
       const data = await apiService.getQueue(sessionId);
       dispatch({ type: 'SET_QUEUE', payload: data.queue });
       await db.queue.clear();
-      if (data.queue.length > 0) await db.queue.bulkAdd(data.queue);
+      if (data.queue.length > 0) await db.queue.bulkPut(data.queue);
     } catch (err) {
       console.error('Failed to sync queue:', err);
     }
@@ -32,7 +32,7 @@ export function useQueue() {
       dispatch({ type: 'CALL_NEXT_PATIENT', payload: data });
       if (data.queue) {
         await db.queue.clear();
-        await db.queue.bulkAdd(data.queue);
+        await db.queue.bulkPut(data.queue);
       }
     } catch (err) {
       // If session not found in DB, clear stale local state
@@ -53,7 +53,17 @@ export function useQueue() {
     dispatch({ type: 'QUEUE_UPDATED', payload: data });
     if (data.queue) {
       await db.queue.clear();
-      await db.queue.bulkAdd(data.queue);
+      await db.queue.bulkPut(data.queue);
+    }
+  };
+
+  const skipPatient = async (tokenId) => {
+    if (!isOnline) return;
+    const data = await apiService.skipPatient(tokenId);
+    dispatch({ type: 'QUEUE_UPDATED', payload: data });
+    if (data.queue) {
+      await db.queue.clear();
+      await db.queue.bulkPut(data.queue);
     }
   };
 
@@ -90,6 +100,7 @@ export function useQueue() {
     session,
     isOnline,
     callNext,
+    skipPatient,
     completeConsultation,
     startSession,
     endSession,

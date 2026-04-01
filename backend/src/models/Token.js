@@ -36,6 +36,29 @@ const tokenSchema = new mongoose.Schema({
   completedAt: {
     type: Number,
     default: null
+  },
+  abhaAddress: {
+    type: String,
+    default: null
+  },
+  phoneNumber: {
+    type: String,
+    default: null
+  },
+  priority: {
+    type: String,
+    enum: ['normal', 'urgent', 'emergency'],
+    default: 'normal'
+  },
+  department: {
+    type: String,
+    default: 'General OPD'
+  },
+  patientProfile: {
+    bloodGroup: { type: String, default: null },
+    chronicDiseases: [{ type: String }],
+    allergies: [{ type: String }],
+    emergencyContact: { type: String, default: null }
   }
 });
 
