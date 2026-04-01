@@ -13,17 +13,19 @@ const app = express();
 const server = http.createServer(app);
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGO_URI.replace('localhost', '127.0.0.1'), {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-}).then(() => {
-  console.log('MongoDB connected');
+mongoose.connect(process.env.MONGO_URI).then(() => {
+  console.log('MongoDB connected successfully to', mongoose.connection.host);
 }).catch(err => {
-  console.error('MongoDB connection error:', err);
+  console.error('MongoDB connection error details:', {
+    message: err.message,
+    name: err.name,
+    code: err.code,
+    reason: err.reason
+  });
 });
 
 // Middleware
-app.use(cors({ origin: 'http://localhost:3000' }));
+app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:5174', 'http://10.228.78.131:5173'] }));
 app.use(express.json());
 
 // Initialize Socket.io
