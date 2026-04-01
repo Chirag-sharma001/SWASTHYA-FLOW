@@ -1,8 +1,8 @@
 import { io } from 'socket.io-client';
 
-// In production (Vercel), connect directly to the backend URL.
-// In dev, the Vite proxy handles it via the same origin.
-const SOCKET_URL = import.meta.env.VITE_API_URL || window.location.origin;
+// In production (Vercel), connect directly to the backend URL via VITE_API_URL.
+// In dev, the Vite proxy handles /socket.io/* via the same origin (empty string).
+const SOCKET_URL = import.meta.env.VITE_API_URL || '';
 
 class SocketService {
   constructor() {
@@ -18,6 +18,8 @@ class SocketService {
 
     if (!this.socket) {
       this.socket = io(SOCKET_URL, {
+        // Start with long-polling (works everywhere), upgrade to WS if possible
+        transports: ['polling', 'websocket'],
         reconnectionDelayMax: 30000,
         reconnectionDelay: 1000,
         randomizationFactor: 0.5,
