@@ -13,16 +13,23 @@ const errorHandler = require('./middleware/errorHandler');
 const app = express();
 const server = http.createServer(app);
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGO_URI).then(() => {
+// Fail fast — don't buffer DB operations. If the DB isn't connected yet, throw
+// immediately so the client gets a clear 503 error instead of a silent 10s timeout.
+mongoose.set('bufferCommands', false);
+
+if (!process.env.MONGO_URI) {
+  console.error('[FATAL] MONGO_URI env var is not set. Set it in the Render dashboard under Environment Variables.');
+  process.exit(1);
+}
+
+mongoose.connect(process.env.MONGO_URI, {
+  serverSelectionTimeoutMS: 8000,   // give up selecting a server after 8s
+  connectTimeoutMS: 10000,
+}).then(() => {
   console.log('MongoDB connected successfully to', mongoose.connection.host);
 }).catch(err => {
-  console.error('MongoDB connection error details:', {
-    message: err.message,
-    name: err.name,
-    code: err.code,
-    reason: err.reason
-  });
+  console.error('[MongoDB] Connection failed:', err.message);
+  // Don't exit — keep server alive so /health still responds
 });
 
 // Middleware — CORS
@@ -54,8 +61,24 @@ app.use(express.json());
 // Initialize Socket.io
 initSocket(server);
 
-// Health-check — Render uses this; must respond before MongoDB is ready
-app.get('/health', (_req, res) => res.json({ status: 'ok', ts: Date.now() }));
+// Health-check — Render uses this; responds before MongoDB is ready
+app.get('/health', (_req, res) => {
+  const dbState = mongoose.connection.readyState;
+  // 1 = connected, 2 = connecting
+  res.json({ status: 'ok', db: dbState === 1 ? 'connected' : 'connecting', ts: Date.now() });
+});
+
+// DB Readiness gate — all /api/* routes fail fast with 503 if DB not connected
+// This prevents the 10s 'buffering timed out' hang on cold starts.
+app.use('/api', (req, res, next) => {
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({
+      error: 'Server is warming up — database not ready yet. Please retry in a few seconds.',
+      retryAfter: 5,
+    });
+  }
+  next();
+});
 
 // Routes
 app.use('/api/sessions', sessionRoutes);

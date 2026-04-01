@@ -2,7 +2,14 @@
 // In production (Vercel), we call the backend directly via VITE_API_URL.
 const BASE_URL = import.meta.env.VITE_API_URL || '';
 
-async function fetchHelper(url, options = {}) {
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * fetchHelper with automatic 503 retry.
+ * Render free tier cold-starts take ~30s. If the backend responds with 503
+ * ("database not ready"), we wait 5 s and retry up to 3 times before throwing.
+ */
+async function fetchHelper(url, options = {}, _retries = 3) {
   const response = await fetch(`${BASE_URL}${url}`, {
     ...options,
     headers: {
@@ -10,6 +17,18 @@ async function fetchHelper(url, options = {}) {
       ...options.headers,
     },
   });
+
+  // 503 = backend is up but DB isn't connected yet (cold start). Retry.
+  if (response.status === 503 && _retries > 0) {
+    let retryAfter = 5;
+    try {
+      const body = await response.json();
+      retryAfter = body.retryAfter ?? 5;
+    } catch (_) { /* ignore */ }
+    console.warn(`[API] Server warming up — retrying in ${retryAfter}s (${_retries} attempts left)`);
+    await sleep(retryAfter * 1000);
+    return fetchHelper(url, options, _retries - 1);
+  }
 
   if (!response.ok) {
     let message = `HTTP ${response.status}`;
